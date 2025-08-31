@@ -1,0 +1,46 @@
+name: cp4-java-compose
+
+services:
+  db:
+    image: gvenzl/oracle-xe:21.3.0
+    container_name: oracle-xe
+    environment:
+      ORACLE_PASSWORD: oracle
+      APP_USER: APPUSER
+      APP_USER_PASSWORD: apppwd
+      ORACLE_CHARACTERSET: AL32UTF8
+    ports:
+      - "1521:1521"
+    volumes:
+      - oracle_data:/opt/oracle/oradata
+    healthcheck:
+      test: ["CMD-SHELL", "echo 'exit' | sqlplus -L APPUSER/apppwd@localhost/XEPDB1 || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 15
+    restart: unless-stopped
+    networks:            # <- ADICIONE ESTA SEÇÃO
+      - backend          # <- db agora também está na 'backend'
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cp4-java-app
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: "jdbc:oracle:thin:@db:1521/XEPDB1"
+      SPRING_DATASOURCE_USERNAME: "APPUSER"
+      SPRING_DATASOURCE_PASSWORD: "apppwd"
+      SPRING_JPA_HIBERNATE_DDL_AUTO: "update"
+      SERVER_PORT: "8081"
+    ports:
+      - "8081:8081"
+    healthcheck:
+      test: ["CMD", "bash", "-lc", "exec 3<>/dev/tcp/localhost/8081"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
